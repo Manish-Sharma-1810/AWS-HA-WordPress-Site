@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create an Application Load Balancer with a target group and a listener.
+
+Parameters:
+  LoadBalancerName:
+    Description: Name of the Application Load Balancer
+    Type: String
+    Default: alb
+  TargetGroupName:
+    Description: Name of the target group
+    Type: String
+    Default: target-group
+  EnvironmentName:
+    Description: Name of the environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+      - test
+Resources:
+  MyApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${EnvironmentName}-${LoadBalancerName}
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      Subnets:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-public-subnet1-id
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-public-subnet2-id
+      SecurityGroups:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-alb-security-group-id
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '30'
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-${LoadBalancerName}
+        - Key: Environment
+          Value: !Ref EnvironmentName
+  MyTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${EnvironmentName}-${TargetGroupName}
+      VpcId: !ImportValue
+        Fn::Sub: ${EnvironmentName}-vpc-id
+      Protocol: HTTP
+      Port: 80
+      TargetType: instance
+      HealthCheckEnabled: true
+      HealthCheckPath: /
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-${TargetGroupName}
+        - Key: Environment
+          Value: !Ref EnvironmentName
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref MyApplicationLoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MyTargetGroup
+Outputs:
+  ApplicationLoadBalancerDnsName:
+    Description: The DNS name of the Application Load Balancer
+    Value: !GetAtt MyApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub ${EnvironmentName}-alb-dns-name
+  ApplicationLoadBalancerName:
+    Description: The name of the Application Load Balancer
+    Value: !Ref MyApplicationLoadBalancer
+    Export:
+      Name: !Sub ${EnvironmentName}-alb-name
+  TargetGroupArn:
+    Description: The ARN of the Target Group
+    Value: !Ref MyTargetGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-target-group-arn

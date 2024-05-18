@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Launch a Ubuntu Server 24.04 LTS (HVM) (64_x86) on EC2 in us-east-1 region
+
+Parameters:
+  NameOfService:
+    Description: The name of the service this stack is to be used for
+    Type: String
+    Default: flask-app-server
+  EnvironmentName:
+    Description: Name of the environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+      - test
+  DeploymentBucket:
+    Description: Name of the deployment bucket
+    Type: String
+    Default: dev-flask-lab
+  InstanceTypeParam:
+    Description: Type of the EC2 instance
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t3.micro
+      - t3.small
+      - t3.medium
+Mappings:
+  RegionAMIConfig:
+    us-east-1:
+      AMI: ami-04b70fa74e45c3917
+    us-east-2:
+      AMI: ami-09040d770ffe2224f
+    ap-south-1:
+      AMI: ami-0f58b397bc5c1f2e8
+Resources:
+  MySSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: Name of the deployment bucket
+      Name: deployment-bucket
+      Tier: Standard
+      Type: String
+      DataType: text
+      Value: !Ref DeploymentBucket
+      Tags:
+        Name: deployment-bucket
+        Environment: !Ref EnvironmentName
+  WebServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceTypeParam
+      ImageId: !FindInMap
+        - RegionAMIConfig
+        - !Ref AWS::Region
+        - AMI
+      Monitoring: true
+      IamInstanceProfile: !ImportValue
+        Fn::Sub: ${EnvironmentName}-ec2-instance-profile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: 'true'
+          DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: '0'
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: ${EnvironmentName}-ec2-security-group-id
+          SubnetId: !ImportValue
+            Fn::Sub: ${EnvironmentName}-public-subnet1-id
+      Tags:
+        - Key: Name
+          Value: !Ref NameOfService
+        - Key: RegionName
+          Value: !Ref AWS::Region
+        - Key: Environment
+          Value: !Ref EnvironmentName
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash
+          apt update -y
+          apt upgrade -y
+          apt install jq -y
+          apt install nginx -y
+          apt install python3-pip unzip less -y
+          pip3 install boto3
+          curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
+          rm -r awscliv2.zip
+          wget -qO- https://get.docker.com | sh
+          apt update -y
+          systemctl start docker
+          systemctl enable docker
+          usermod -aG docker ssm-user
+          TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+          PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/public-ipv4)
+          aws s3 cp s3://${DeploymentBucket}/PDFExtractor/ /home/ubuntu/PDFExtractor/ --recursive
+          chmod +x /home/ubuntu/PDFExtractor/start_containers.sh
+          curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/dynamic/instance-identity/document > /home/ubuntu/PDFExtractor/ec2_metadata.json
+          AWS_REGION=${AWS::Region} BUCKET_NAME=${DeploymentBucket} /home/ubuntu/PDFExtractor/start_containers.sh
+          sed -i "s/public_ip/$PUBLIC_IP/g" /home/ubuntu/PDFExtractor/flask_reverse_proxy.conf
+          cp /home/ubuntu/PDFExtractor/flask_reverse_proxy.conf /etc/nginx/sites-available/flask_reverse_proxy.conf
+          ln -s /etc/nginx/sites-available/flask_reverse_proxy.conf /etc/nginx/sites-enabled/
+          systemctl restart nginx
+Outputs:
+  AccountId:
+    Description: AWS Account ID
+    Value: !Ref AWS::AccountId
+  RegionName:
+    Description: AWS Region Name
+    Value: !Ref AWS::Region
+  StackId:
+    Description: Current Stack ID
+    Value: !Ref AWS::StackId
+  StackName:
+    Description: Current Stack Name
+    Value: !Ref AWS::StackName
+  InstanceId:
+    Description: ID of the EC2 instance
+    Value: !Ref WebServer
+    Export:
+      Name: !Sub ${EnvironmentName}-instance-id
+  PublicDnsName:
+    Description: Public DNS name of the EC2 instance
+    Value: !GetAtt WebServer.PublicDnsName
+  PublicIpAddress:
+    Description: Public IP address of the EC2 instance
+    Value: !GetAtt WebServer.PublicIp
+  AMIId:
+    Description: ImageId of the AMI
+    Value: !FindInMap
+      - RegionAMIConfig
+      - !Ref AWS::Region
+      - AMI
+  VpcId:
+    Description: VPC ID of the EC2 instance
+    Value: !GetAtt WebServer.VpcId
+  SubnetId:
+    Description: Subnet ID of the EC2 instance
+    Value: !GetAtt WebServer.SubnetId
+  InstanceSecurityGroupId:
+    Description: Security Group ID of the EC2 instance
+    Value: !ImportValue
+      Fn::Sub: ${EnvironmentName}-ec2-security-group-id
+  SSMParameter:
+    Description: SSM Parameter for the deployment bucket
+    Value: !Ref MySSMParameter
+    Export:
+      Name: deployment-bucket-ssm-parameter

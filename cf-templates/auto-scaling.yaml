@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for creating an Auto Scaling Group with Launch Template
+
+Parameters:
+  ServiceName:
+    Description: The name of the service this stack is to be used for
+    Type: String
+    Default: WordPress-Server
+  EnvironmentName:
+    Description: Name of the environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+      - test
+  DeploymentBucket:
+    Description: Name of the deployment bucket
+    Type: String
+    Default: dev-wordpress-setup-1
+  LaunchTemplateName:
+    Type: String
+    Description: The name of the Launch Template
+    Default: launch-template
+  AutoScalingGroupName:
+    Type: String
+    Description: The name of the Auto Scaling Group
+    Default: auto-scaling-group
+  DesiredCapacity:
+    Type: Number
+    Description: The desired capacity of the Auto Scaling Group
+    Default: 2
+  MaxSize:
+    Type: Number
+    Description: The maximum size of the Auto Scaling Group
+    Default: 4
+  MinSize:
+    Type: Number
+    Description: The minimum size of the Auto Scaling Group
+    Default: 1
+  InstanceTypeParam:
+    Description: Type of the EC2 instance
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t3.micro
+      - t3.small
+      - t3.medium
+Mappings:
+  RegionAMIConfig:
+    us-east-1:
+      AMI: ami-04b70fa74e45c3917
+    us-east-2:
+      AMI: ami-09040d770ffe2224f
+    ap-south-1:
+      AMI: ami-0f58b397bc5c1f2e8
+
+Resources:
+  MyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${EnvironmentName}-${LaunchTemplateName}
+      LaunchTemplateData:
+        IamInstanceProfile: !ImportValue
+          Fn::Sub: ${EnvironmentName}-ec2-instance-profile
+        ImageId: !FindInMap
+          - RegionAMIConfig
+          - !Ref AWS::Region
+          - AMI
+        InstanceType: !Ref InstanceTypeParam
+        Monitoring: 
+          Enabled: true
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeleteOnTermination: true
+            Description: Primary network interface
+            DeviceIndex: 0
+            Groups:
+              - !ImportValue
+                Fn::Sub: ${EnvironmentName}-ec2-security-group-id
+            SubnetId: !ImportValue
+              Fn::Sub: ${EnvironmentName}-public-subnet-1
+        userData: !Base64 
+          Fn::Sub: |
+            #!/bin/bash
+            apt update -y
+            apt upgrade -y
+            apt install python3-pip unzip less -y
+            apt install jq -y
+            pip3 install pandas
+            pip3 install boto3
+            apt install apache2 -y
+            systemctl start apache2
+            systemctl enable apache2
+            curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip -q awscliv2.zip
+            ./aws/install
+            rm -r awscliv2.zip
+            aws s3 cp s3://${DeploymentBucket}/configs/ /home/ubuntu/configs/ --recursive
+            TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+            VPC_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/network/interfaces/macs/)/vpc-id)
+            SUBNET_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/network/interfaces/macs/)/subnet-id)
+            AVAILABILITY_ZONE=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/placement/availability-zone)
+            INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/instance-id)
+            PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/public-ipv4)
+            LOCAL_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/local-ipv4)
+            HOSTNAME=$(hostname -f)
+            INSTANCE_JSON_DATA=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/dynamic/instance-identity/document)
+            ACCOUNT_ID=$(echo "$INSTANCE_JSON_DATA" | jq -r '.accountId')
+            IMAGE_ID=$(echo "$INSTANCE_JSON_DATA" | jq -r '.imageId')
+            INSTANCE_TYPE=$(echo "$INSTANCE_JSON_DATA" | jq -r '.instanceType')
+            echo "<html lang='en'>" > /var/www/html/index.html
+            echo "<head>" >> /var/www/html/index.html
+            echo "  <meta charset='UTF-8'>" >> /var/www/html/index.html
+            echo "  <meta name='viewport' content='width=device-width, initial-scale=1.0'>" >> /var/www/html/index.html
+            echo "  <title>MyEC2</title>" >> /var/www/html/index.html
+            echo "</head>" >> /var/www/html/index.html
+            echo "<body>" >> /var/www/html/index.html
+            echo "  <header>" >> /var/www/html/index.html
+            echo "      <h1>Welcome to Apache Server</h1>" >> /var/www/html/index.html
+            echo "  </header>" >> /var/www/html/index.html
+            echo "  <div>" >> /var/www/html/index.html
+            echo "      <h1>Hello World, from the Ubuntu Server: $HOSTNAME</h1>" >> /var/www/html/index.html
+            echo "      <table>" >> /var/www/html/index.html
+            echo "          <tr><td>Account ID: </td><td>$ACCOUNT_ID</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Image ID: </td><td>$IMAGE_ID</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Instance ID: </td><td>$INSTANCE_ID</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Instance Type: </td><td>$INSTANCE_TYPE</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Availability Zone: </td><td>$AVAILABILITY_ZONE</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Public IPv4: </td><td>$PUBLIC_IP</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Private IPv4: </td><td>$LOCAL_IP</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Hostname: </td><td>$HOSTNAME</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>VPC ID: </td><td>$VPC_ID</td></tr>" >> /var/www/html/index.html
+            echo "          <tr><td>Subnet ID: </td><td>$SUBNET_ID</td></tr>" >> /var/www/html/index.html
+            echo "      </table>" >> /var/www/html/index.html
+            echo "  </div>" >> /var/www/html/index.html
+            echo "</body>" >> /var/www/html/index.html
+            echo "</html>" >> /var/www/html/index.html
+      VersionDescription: Version-1
+  MyAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${EnvironmentName}-${AutoScalingGroupName}
+      DesiredCapacity: !Ref DesiredCapacity
+      MaxSize: !Ref MaxSize
+      MinSize: !Ref MinSize
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 0
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-public-subnet1-id
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-public-subnet2-id
+      TargetGroupARNs:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-target-group-arn
+      Tags: 
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-${ServiceName}
+          PropagateAtLaunch: true
+
+Outputs:
+  AutoScalingGroupName:
+    Description: The name of the Auto Scaling Group
+    Value: !Ref MyAutoScalingGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-${AutoScalingGroupName}
+  AutoScalingGroupARN:
+    Description: The ARN of the Auto Scaling Group
+    Value: !GetAtt MyAutoScalingGroup.Arn
+  AutoScalingGroupMinSize:
+    Description: The minimum size of the Auto Scaling Group
+    Value: !GetAtt MyAutoScalingGroup.MinSize
+  AutoScalingGroupMaxSize:
+    Description: The maximum size of the Auto Scaling Group
+    Value: !GetAtt MyAutoScalingGroup.MaxSize
+  AutoScalingGroupDesiredCapacity:
+    Description: The desired capacity of the Auto Scaling Group
+    Value: !GetAtt MyAutoScalingGroup.DesiredCapacity

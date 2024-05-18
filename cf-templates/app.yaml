@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This CloudFormation template orchestrates the creation of IAM role, VPC, Subnets, Security Groups, Auto Scaling Group, and Application Load Balancer using nested stacks.
+
+Parameters:
+  DeploymentBucket:
+    Description: Name of the deployment bucket
+    Type: String
+    Default: dev-wordpress-setup-1
+  EnvironmentName:
+    Description: Name of the environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+      - test
+  InstanceTypeParam:
+    Description: Type of the EC2 instance
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t3.micro
+      - t3.small
+      - t3.medium
+  DesiredCapacity:
+    Type: Number
+    Description: The desired capacity of the Auto Scaling Group
+    Default: 2
+
+Resources:
+  IAMStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/templates/iam.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/templates/vpc.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+  ALBStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - VPCStack
+    Properties:
+      TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/templates/alb.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+  ASGStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - IAMStack
+      - VPCStack
+      - ALBStack
+    Properties:
+      TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/templates/ec2.yaml
+      Parameters:
+        DeploymentBucket: !Ref DeploymentBucket
+        InstanceTypeParam: !Ref InstanceTypeParam
+        EnvironmentName: !Ref EnvironmentName
+
+Outputs:
+  ApplicationLoadBalancerDnsName:
+    Description: The DNS name of the Application Load Balancer
+    Value: !GetAtt ALBStack.Outputs.ApplicationLoadBalancerDnsName
+  AutoScalingGroupName:
+    Description: The name of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupName
+  AutoScalingGroupARN:
+    Description: The ARN of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupARN
+  AutoScalingGroupMinSize:
+    Description: The minimum size of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupMinSize
+  AutoScalingGroupMaxSize:
+    Description: The maximum size of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupMaxSize
+  AutoScalingGroupDesiredCapacity:
+    Description: The desired capacity of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupDesiredCapacity
