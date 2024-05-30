@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for creating an Auto Scaling Group with Launch Template
+
+Parameters:
+  ServiceName:
+    Description: The name of the service this stack is to be used for
+    Type: String
+    Default: WordPress-Server
+  EnvironmentName:
+    Description: Name of the environment
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+      - test
+  DeploymentBucket:
+    Description: Name of the deployment bucket
+    Type: String
+    Default: dev-wordpress-setup-1
+  LaunchTemplateName:
+    Type: String
+    Description: The name of the Launch Template
+    Default: launch-template
+  AutoScalingGroupName:
+    Type: String
+    Description: The name of the Auto Scaling Group
+    Default: auto-scaling-group
+  ACGDesiredCapacity:
+    Type: Number
+    Description: The desired capacity of the Auto Scaling Group
+    Default: 2
+  ACGMaxSize:
+    Type: Number
+    Description: The maximum size of the Auto Scaling Group
+    Default: 4
+  ACGMinSize:
+    Type: Number
+    Description: The minimum size of the Auto Scaling Group
+    Default: 1
+  InstanceTypeParam:
+    Description: Type of the EC2 instance
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t3.micro
+      - t3.small
+      - t3.medium
+Mappings:
+  RegionAMIConfig:
+    us-east-1:
+      AMI: ami-04b70fa74e45c3917
+    us-east-2:
+      AMI: ami-09040d770ffe2224f
+    ap-south-1:
+      AMI: ami-0f58b397bc5c1f2e8
+
+Resources:
+  MyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${EnvironmentName}-${LaunchTemplateName}
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Name: !ImportValue
+            Fn::Sub: ${EnvironmentName}-ec2-instance-profile
+        ImageId: !FindInMap
+          - RegionAMIConfig
+          - !Ref AWS::Region
+          - AMI
+        InstanceType: !Ref InstanceTypeParam
+        Monitoring:
+          Enabled: true
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeleteOnTermination: true
+            Description: Primary network interface
+            DeviceIndex: 0
+            Groups:
+              - !ImportValue
+                Fn::Sub: ${EnvironmentName}-ec2-security-group-id
+        UserData: !Base64
+          Fn::Sub: |
+            #!/bin/bash
+            apt update -y
+            apt upgrade -y
+            apt install jq -y
+            apt install python3-pip unzip less -y
+            apt install apache2 -y
+            systemctl start apache2
+            systemctl enable apache2
+            apt install php php-mysql libapache2-mod-php php-cli php-cgi php-gd -y
+            curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip -q awscliv2.zip
+            ./aws/install
+            rm -r awscliv2.zip
+            aws s3 cp s3://${DeploymentBucket}/wordpress-site/web/ /home/ubuntu/wordpress-site/web/ --recursive
+            chmod +x /home/ubuntu/wordpress-site/web/wp_setup.sh
+            /home/ubuntu/wordpress-site/web/wp_setup.sh
+      VersionDescription: Version1.0
+  MyAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${EnvironmentName}-${AutoScalingGroupName}
+      DesiredCapacity: !Ref ACGDesiredCapacity
+      MaxSize: !Ref ACGMaxSize
+      MinSize: !Ref ACGMinSize
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 0
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      VPCZoneIdentifier:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-public-subnet1-id
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-public-subnet2-id
+      TargetGroupARNs:
+        - !ImportValue
+          Fn::Sub: ${EnvironmentName}-target-group-arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-${ServiceName}
+          PropagateAtLaunch: true
+
+Outputs:
+  AutoScalingGroupName:
+    Description: The name of the Auto Scaling Group
+    Value: !Ref MyAutoScalingGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-${AutoScalingGroupName}
+  AutoScalingGroupMinSize:
+    Description: The minimum size of the Auto Scaling Group
+    Value: !GetAtt MyAutoScalingGroup.MinSize
+  AutoScalingGroupMaxSize:
+    Description: The maximum size of the Auto Scaling Group
+    Value: !GetAtt MyAutoScalingGroup.MaxSize
+  AutoScalingGroupDesiredCapacity:
+    Description: The desired capacity of the Auto Scaling Group
+    Value: !GetAtt MyAutoScalingGroup.DesiredCapacity

@@ -26,6 +26,19 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: SSMParameterStoreAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                  - ssm:GetParametersByPath
+                  - ssm:PutParameter
+                  - ssm:AddTagsToResource
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-ec2-role
@@ -34,7 +47,7 @@ Resources:
   MyEC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: ec2-instance-profile
+      InstanceProfileName: !Sub ${EnvironmentName}-ec2-instance-profile
       Path: /
       Roles:
         - !Ref MyEC2Role

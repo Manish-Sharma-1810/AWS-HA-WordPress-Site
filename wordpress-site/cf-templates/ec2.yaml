@@ -21,7 +21,7 @@ Parameters:
   InstanceTypeParam:
     Description: Type of the EC2 instance
     Type: String
-    Default: t2.micro
+    Default: t3.micro
     AllowedValues:
       - t2.micro
       - t2.small

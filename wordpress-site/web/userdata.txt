@@ -1,0 +1,16 @@
+#!/bin/bash
+apt update -y
+apt upgrade -y
+apt install jq -y
+apt install python3-pip unzip less -y
+apt install apache2 -y
+systemctl start apache2
+systemctl enable apache2
+apt install php php-mysql libapache2-mod-php php-cli php-cgi php-gd -y
+curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip -q awscliv2.zip
+./aws/install
+rm -r awscliv2.zip
+aws s3 cp s3://${DeploymentBucket}/wordpress-site/web/ /home/ubuntu/wordpress-site/web/ --recursive
+chmod +x /home/ubuntu/wordpress-site/web/wp_setup.sh
+/home/ubuntu/wordpress-site/web/wp_setup.sh

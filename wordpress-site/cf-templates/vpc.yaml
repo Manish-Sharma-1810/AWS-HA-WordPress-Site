@@ -184,6 +184,18 @@ Resources:
       PortRange:
         From: '1024'
         To: '65535'
+  PublicSubnet1NetworkAclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      NetworkAclId: !Ref PublicNetworkAcl
+  PublicSubnet2NetworkAclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      NetworkAclId: !Ref PublicNetworkAcl
+
+  # Private Subnet1
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -208,7 +220,7 @@ Resources:
   NATGateway:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt ElasticIP.AllocationId
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
       SubnetId: !Ref PublicSubnet1
       Tags:
         - Key: Name
@@ -235,16 +247,6 @@ Resources:
     Properties:
       SubnetId: !Ref PrivateSubnet1
       RouteTableId: !Ref PrivateRouteTable
-  PublicSubnet1NetworkAclAssociation:
-    Type: AWS::EC2::SubnetNetworkAclAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnet1
-      NetworkAclId: !Ref PublicNetworkAcl
-  PublicSubnet2NetworkAclAssociation:
-    Type: AWS::EC2::SubnetNetworkAclAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnet2
-      NetworkAclId: !Ref PublicNetworkAcl
   PrivateNetworkAcl:
     Type: AWS::EC2::NetworkAcl
     Properties:
@@ -266,6 +268,18 @@ Resources:
       PortRange:
         From: '3306'
         To: '3306'
+  InboundEmphemeralPrivateNetworkAclEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNetworkAcl
+      RuleNumber: '101'
+      Protocol: '6'
+      RuleAction: allow
+      Egress: 'false'
+      CidrBlock: '0.0.0.0/0'
+      PortRange:
+        From: '1024'
+        To: '65535'
   OutboundMySQLPrivateNetworkAclEntry:
     Type: AWS::EC2::NetworkAclEntry
     Properties:
@@ -278,6 +292,42 @@ Resources:
       PortRange:
         From: '3306'
         To: '3306'
+  OutboundHTTPSPrivateNetworkAclEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNetworkAcl
+      RuleNumber: '101'
+      Protocol: '6'
+      RuleAction: allow
+      Egress: 'true'
+      CidrBlock: '0.0.0.0/0'
+      PortRange:
+        From: '443'
+        To: '443'
+  OutboundHTTPPrivateNetworkAclEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNetworkAcl
+      RuleNumber: '102'
+      Protocol: '6'
+      RuleAction: allow
+      Egress: 'true'
+      CidrBlock: '0.0.0.0/0'
+      PortRange:
+        From: '80'
+        To: '80'
+  OutboundEmphemeralPrivateNetworkAclEntry:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref PrivateNetworkAcl
+      RuleNumber: '103'
+      Protocol: '6'
+      RuleAction: allow
+      Egress: 'true'
+      CidrBlock: '0.0.0.0/0'
+      PortRange:
+        From: '1024'
+        To: '65535'
   PrivateSubnet1NetworkAclAssociation:
     Type: AWS::EC2::SubnetNetworkAclAssociation
     Properties:
@@ -291,12 +341,14 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: '80'
-          ToPort: '80'
+          Description: Allow HTTP traffic from anywhere
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
-          FromPort: '443'
-          ToPort: '443'
+          Description: Allow HTTPS traffic from anywhere
+          FromPort: 443
+          ToPort: 443
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
@@ -311,13 +363,19 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: '80'
-          ToPort: '80'
+          Description: Allow HTTP traffic from ALB
+          FromPort: 80
+          ToPort: 80
           SourceSecurityGroupId: !Ref ALBSecurityGroup
         - IpProtocol: tcp
-          FromPort: '443'
-          ToPort: '443'
+          Description: Allow HTTPS traffic from ALB
+          FromPort: 443
+          ToPort: 443
           SourceSecurityGroupId: !Ref ALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: !Ref VpcCidr
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-EC2SecurityGroup
@@ -371,6 +429,11 @@ Outputs:
     Value: !Ref PublicSubnet2
     Export:
       Name: !Sub ${EnvironmentName}-public-subnet2-id
+  PrivateSubnet1Id:
+    Description: Private subnet 1 ID
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-private-subnet1-id
   EC2SecurityGroupId:
     Description: EC2 security group ID
     Value: !Ref EC2SecurityGroup
