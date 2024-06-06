@@ -1,13 +1,13 @@
 ################ Instructions to deploy a WordPress site on EC2 ################
 
 1. Create s3 bucket
-aws s3api create-bucket --bucket dev-wordpress-setup-1 --region us-east-1
+aws s3api create-bucket --bucket dev-wordpress-setup-lab-1 --region us-east-1
 
 2. Copy the code to s3 bucket
-aws s3 cp ./wordpress-site/ s3://dev-wordpress-setup-1/wordpress-site/ --recursive
+aws s3 cp ./wordpress-site/ s3://dev-wordpress-setup-lab-1/wordpress-site/ --recursive
 
 3. Create CloudFormation stack for the application
-aws cloudformation create-stack --stack-name app --template-url https://dev-wordpress-setup-1.s3.amazonaws.com/wordpress-site/cf-templates/app.yaml --parameters ParameterKey=DeploymentBucket,ParameterValue=dev-wordpress-setup-1 ParameterKey=InstanceTypeParam,ParameterValue=t3.micro ParameterKey=ACGDesiredCapacity,ParameterValue=2 --capabilities CAPABILITY_NAMED_IAM --region us-east-1
+aws cloudformation create-stack --stack-name app --template-url https://dev-wordpress-setup-lab-1.s3.amazonaws.com/wordpress-site/cf-templates/app.yaml --parameters ParameterKey=DeploymentBucket,ParameterValue=dev-wordpress-setup-lab-1 ParameterKey=InstanceTypeParam,ParameterValue=t3.micro ParameterKey=ACGDesiredCapacity,ParameterValue=1 --capabilities CAPABILITY_NAMED_IAM --region us-east-1
 
 4. Check app stack
 aws cloudformation describe-stacks --stack-name app --query "Stacks[0].StackStatus" --output text --region us-east-1

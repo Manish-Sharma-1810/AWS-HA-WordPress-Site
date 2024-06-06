@@ -7,7 +7,7 @@ Parameters:
   DeploymentBucket:
     Description: Name of the deployment bucket
     Type: String
-    Default: dev-wordpress-setup-1
+    Default: dev-wordpress-setup-lab-1
   EnvironmentName:
     Description: Name of the environment
     Type: String
@@ -66,43 +66,42 @@ Resources:
       Parameters:
         DeploymentBucket: !Ref DeploymentBucket
         EnvironmentName: !Ref EnvironmentName
+  ALBStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - VPCStack
+    Properties:
+      TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/wordpress-site/cf-templates/alb.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+  ASGStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - IAMStack
+      - VPCStack
+      - ALBStack
+      - DBStack
+    Properties:
+      TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/wordpress-site/cf-templates/auto-scaling.yaml
+      Parameters:
+        DeploymentBucket: !Ref DeploymentBucket
+        InstanceTypeParam: !Ref InstanceTypeParam
+        ACGDesiredCapacity: !Ref ACGDesiredCapacity
+        EnvironmentName: !Ref EnvironmentName
 
-  # ALBStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   DependsOn:
-  #     - VPCStack
-  #   Properties:
-  #     TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/templates/alb.yaml
-  #     Parameters:
-  #       EnvironmentName: !Ref EnvironmentName
-  #       InstanceTypeParam: !Ref InstanceTypeParam
-  # ASGStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   DependsOn:
-  #     - IAMStack
-  #     - VPCStack
-  #     - ALBStack
-  #   Properties:
-  #     TemplateURL: !Sub https://${DeploymentBucket}.s3.amazonaws.com/templates/auto-scaling.yaml
-  #     Parameters:
-  #       DeploymentBucket: !Ref DeploymentBucket
-  #       InstanceTypeParam: !Ref InstanceTypeParam
-  #       ACGDesiredCapacity: !Ref ACGDesiredCapacity
-  #       EnvironmentName: !Ref EnvironmentName
-
-# Outputs:
-#   ApplicationLoadBalancerDnsName:
-#     Description: The DNS name of the Application Load Balancer
-#     Value: !GetAtt ALBStack.Outputs.ApplicationLoadBalancerDnsName
-#   AutoScalingGroupName:
-#     Description: The name of the Auto Scaling Group
-#     Value: !GetAtt ASGStack.Outputs.AutoScalingGroupName
-#   AutoScalingGroupMinSize:
-#     Description: The minimum size of the Auto Scaling Group
-#     Value: !GetAtt ASGStack.Outputs.AutoScalingGroupMinSize
-#   AutoScalingGroupMaxSize:
-#     Description: The maximum size of the Auto Scaling Group
-#     Value: !GetAtt ASGStack.Outputs.AutoScalingGroupMaxSize
-#   AutoScalingGroupDesiredCapacity:
-#     Description: The desired capacity of the Auto Scaling Group
-#     Value: !GetAtt ASGStack.Outputs.AutoScalingGroupDesiredCapacity
+Outputs:
+  ApplicationLoadBalancerDnsName:
+    Description: The DNS name of the Application Load Balancer
+    Value: !GetAtt ALBStack.Outputs.ApplicationLoadBalancerDnsName
+  AutoScalingGroupName:
+    Description: The name of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupName
+  AutoScalingGroupMinSize:
+    Description: The minimum size of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupMinSize
+  AutoScalingGroupMaxSize:
+    Description: The maximum size of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupMaxSize
+  AutoScalingGroupDesiredCapacity:
+    Description: The desired capacity of the Auto Scaling Group
+    Value: !GetAtt ASGStack.Outputs.AutoScalingGroupDesiredCapacity

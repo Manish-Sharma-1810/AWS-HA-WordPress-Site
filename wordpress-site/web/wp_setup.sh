@@ -29,44 +29,30 @@ error_exit() {
 }
 
 # Function to get parameter value by name
-get_parameter_value() {
-    local param_path=$1
-    local param_name=$2
-    echo "$param_path" | jq -r ".[] | select(.Name==\"${param_name}\") | .Value"
+function get_parameter_value() {
+  local parameters_list=$1
+  local parameter_name=$2
+  local parameter_value
+  parameter_value=$(echo "$parameters_list" | jq -r --arg key "$parameter_name" '.[] | select(.Name == $key) | .Value') || error_exit "Failed to get value of the $parameter_name"!
+  echo "$parameter_value"
 }
 
-# Fetch parameters from SSM Parameter Store and handle errors
-fetch_parameters() {
+# Fetch db parameters from the AWS SSM Parameter Store
+fetch_db_parameters() {
     local param_path=$1
     local result
-    result=$(aws ssm get-parameters-by-path --path "$param_path" --with-decryption --query 'Parameters[*].{Name:Name,Value:Value}' --output json) || error_exit "Failed to fetch parameters from $param_path"
+    result=$(aws ssm get-parameters --names "${param_path}/wp_database" "${param_path}/wp_user" "${param_path}/wp_user_password" "${param_path}/db_host" --with-decryption --query 'Parameters[*].{Name:Name,Value:Value}' --output json) || error_exit "Failed to fetch db parameters from $param_path"!
     echo "$result"
 }
 
-# Download the latest WordPress package
-log_message "Downloading the latest WordPress package"
-wget -c http://wordpress.org/latest.tar.gz || error_exit "Failed to download WordPress package"
-
-# Extract the downloaded package
-log_message "Extracting the WordPress package"
-tar -xzvf latest.tar.gz || error_exit "Failed to extract WordPress package"
-
-# Remove the tar file
-log_message "Removing the WordPress tar.gz file"
-rm -r latest.tar.gz || error_exit "Failed to remove the tar.gz file"
-
-# Move WordPress files to the web server directory
-log_message "Moving WordPress files to /var/www/html/"
-mv wordpress/* /var/www/html/ || error_exit "Failed to move WordPress files to /var/www/html/"
-
-# Set correct permissions and ownership
-log_message "Setting permissions and ownership for /var/www/html/"
-chown -R www-data:www-data /var/www/html/ || error_exit "Failed to change ownership of /var/www/html/"
-chmod -R 755 /var/www/html/ || error_exit "Failed to change permissions of /var/www/html/"
-
-# Copy the sample configuration file to wp-config.php
-log_message "Copying wp-config-sample.php to wp-config.php"
-cp /var/www/html/wp-config-sample.php /var/www/html/wp-config.php || error_exit "Failed to copy wp-config-sample.php to wp-config.php"
+# Fetch wordpress parameters from the SSM Parameter Store
+fetch_wordpress_parameters() {
+    local param_path=$1
+    local result
+    # Fetch parameters from SSM by path
+    result=$(aws ssm get-parameters-by-path --path "$param_path" --with-decryption --query 'Parameters[*].{Name:Name,Value:Value}' --output json) || error_exit "Failed to fetch wordpress parameters from $param_path"!
+    echo "$result"
+}
 
 # Define the base paths in SSM Parameter Store
 SSM_MYSQL_PARAM_PATH="/mysql"
@@ -77,44 +63,46 @@ log_message "Updating wp-config.php file"
 
 # Fetch MySQL and WordPress parameters
 log_message "Fetching MySQL and WordPress parameters from the AWS SSM Parameter Store"
-MYSQL_PARAMETERS=$(fetch_parameters "$SSM_MYSQL_PARAM_PATH")
-WORDPRESS_PARAMETERS=$(fetch_parameters "$SSM_WORDPRESS_PARAM_PATH")
+MYSQL_PARAMETERS=$(fetch_db_parameters "$SSM_MYSQL_PARAM_PATH")
+WORDPRESS_PARAMETERS=$(fetch_wordpress_parameters "$SSM_WORDPRESS_PARAM_PATH")
 
 # Retrieve MySQL parameters from SSM Parameter Store
 log_message "Retrieving MySQL parameters from SSM Parameter Store"
-DB_NAME=$(get_parameter_value "$MYSQL_PARAMETERS" "${SSM_MYSQL_PARAM_PATH}/db_name")
-DB_USER=$(get_parameter_value "$MYSQL_PARAMETERS" "${SSM_MYSQL_PARAM_PATH}/db_user")
-DB_PASSWORD=$(get_parameter_value "$MYSQL_PARAMETERS" "${SSM_MYSQL_PARAM_PATH}/db_password")
+DB_NAME=$(get_parameter_value "$MYSQL_PARAMETERS" "${SSM_MYSQL_PARAM_PATH}/wp_database")
+DB_USER=$(get_parameter_value "$MYSQL_PARAMETERS" "${SSM_MYSQL_PARAM_PATH}/wp_user")
+DB_PASSWORD=$(get_parameter_value "$MYSQL_PARAMETERS" "${SSM_MYSQL_PARAM_PATH}/wp_user_password")
 DB_HOST=$(get_parameter_value "$MYSQL_PARAMETERS" "${SSM_MYSQL_PARAM_PATH}/db_host")
 
 # Retrieve WordPress parameters from SSM Parameter Store
 log_message "Retrieving WordPress parameters from SSM Parameter Store"
-AUTH_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/auth_key")
-SECURE_AUTH_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/secure_auth_key")
-LOGGED_IN_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/logged_in_key")
-NONCE_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/nonce_key")
-AUTH_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/auth_salt")
-SECURE_AUTH_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/secure_auth_salt")
-LOGGED_IN_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/logged_in_salt")
-NONCE_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/nonce_salt")
+AUTH_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/AUTH_KEY")
+SECURE_AUTH_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/SECURE_AUTH_KEY")
+LOGGED_IN_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/LOGGED_IN_KEY")
+NONCE_KEY=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/NONCE_KEY")
+AUTH_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/AUTH_SALT")
+SECURE_AUTH_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/SECURE_AUTH_SALT")
+LOGGED_IN_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/LOGGED_IN_SALT")
+NONCE_SALT=$(get_parameter_value "$WORDPRESS_PARAMETERS" "${SSM_WORDPRESS_PARAM_PATH}/NONCE_SALT")
 log_message "Fetched parameters successfully from AWS SSM Parameter Store"
 
 # Update wp-config.php with the retrieved values
-WP_CONFIG_PATH="/var/www/html/wp-config.php"
+WP_CONFIG_PATH="/var/www/html/wordpress/wp-config.php"
 
 log_message "Updating wp-config.php file with retrieved values"
 sed -i "s/define( 'DB_NAME', '.*' );/define( 'DB_NAME', '$DB_NAME' );/g" "$WP_CONFIG_PATH"
 sed -i "s/define( 'DB_USER', '.*' );/define( 'DB_USER', '$DB_USER' );/g" "$WP_CONFIG_PATH"
 sed -i "s/define( 'DB_PASSWORD', '.*' );/define( 'DB_PASSWORD', '$DB_PASSWORD' );/g" "$WP_CONFIG_PATH"
 sed -i "s/define( 'DB_HOST', '.*' );/define( 'DB_HOST', '$DB_HOST' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'AUTH_KEY', '.*' );/define( 'AUTH_KEY', '$AUTH_KEY' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'SECURE_AUTH_KEY', '.*' );/define( 'SECURE_AUTH_KEY', '$SECURE_AUTH_KEY' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'LOGGED_IN_KEY', '.*' );/define( 'LOGGED_IN_KEY', '$LOGGED_IN_KEY' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'NONCE_KEY', '.*' );/define( 'NONCE_KEY', '$NONCE_KEY' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'AUTH_SALT', '.*' );/define( 'AUTH_SALT', '$AUTH_SALT' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'SECURE_AUTH_SALT', '.*' );/define( 'SECURE_AUTH_SALT', '$SECURE_AUTH_SALT' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'LOGGED_IN_SALT', '.*' );/define( 'LOGGED_IN_SALT', '$LOGGED_IN_SALT' );/g" "$WP_CONFIG_PATH"
-sed -i "s/define( 'NONCE_SALT', '.*' );/define( 'NONCE_SALT', '$NONCE_SALT' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'DB_CHARSET', '.*' );/define( 'DB_CHARSET', 'utf8mb4' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'DB_COLLATE', '.*' );/define( 'DB_COLLATE', 'utf8mb4_unicode_ci' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'AUTH_KEY', *'put your unique phrase here' );/define( 'AUTH_KEY', '$AUTH_KEY' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'SECURE_AUTH_KEY', *'put your unique phrase here' );/define( 'SECURE_AUTH_KEY', '$SECURE_AUTH_KEY' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'LOGGED_IN_KEY', *'put your unique phrase here' );/define( 'LOGGED_IN_KEY', '$LOGGED_IN_KEY' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'NONCE_KEY', *'put your unique phrase here' );/define( 'NONCE_KEY', '$NONCE_KEY' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'AUTH_SALT', *'put your unique phrase here' );/define( 'AUTH_SALT', '$AUTH_SALT' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'SECURE_AUTH_SALT', *'put your unique phrase here' );/define( 'SECURE_AUTH_SALT', '$SECURE_AUTH_SALT' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'LOGGED_IN_SALT', *'put your unique phrase here' );/define( 'LOGGED_IN_SALT', '$LOGGED_IN_SALT' );/g" "$WP_CONFIG_PATH"
+sed -i "s/define( 'NONCE_SALT', *'put your unique phrase here' );/define( 'NONCE_SALT', '$NONCE_SALT' );/g" "$WP_CONFIG_PATH"
 
 if [ $? -eq 0 ]; then
     log_message "wp-config.php has been updated successfully with values from AWS SSM Parameter Store"

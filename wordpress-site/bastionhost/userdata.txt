@@ -10,5 +10,3 @@ rm -r awscliv2.zip
 aws s3 cp s3://${DeploymentBucket}/wordpress-site/bastionhost/ /home/ubuntu/wordpress-site/bastionhost/ --recursive
 chmod +x /home/ubuntu/wordpress-site/bastionhost/bastionhost_setup.sh
 /home/ubuntu/wordpress-site/bastionhost/bastionhost_setup.sh
-
-aws s3 cp s3://dev-wordpress-setup-1/wordpress-site/bastionhost/ /home/ubuntu/wordpress-site/bastionhost/ --recursive

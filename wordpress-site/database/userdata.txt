@@ -11,4 +11,4 @@ TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 LOCAL_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/local-ipv4)
 aws s3 cp s3://${DeploymentBucket}/wordpress-site/database/ /home/ubuntu/wordpress-site/database/ --recursive
 chmod +x /home/ubuntu/wordpress-site/database/mysql_setup.sh
-MYSQL_WP_USER=wp_user DB_HOST=$LOCAL_IP /home/ubuntu/wordpress-site/database/mysql_setup.sh
+DB_HOST=$LOCAL_IP /home/ubuntu/wordpress-site/database/mysql_setup.sh

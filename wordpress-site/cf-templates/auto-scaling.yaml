@@ -17,7 +17,7 @@ Parameters:
   DeploymentBucket:
     Description: Name of the deployment bucket
     Type: String
-    Default: dev-wordpress-setup-1
+    Default: dev-wordpress-setup-lab-1
   LaunchTemplateName:
     Type: String
     Description: The name of the Launch Template
@@ -88,6 +88,7 @@ Resources:
             apt update -y
             apt upgrade -y
             apt install jq -y
+            apt install mysql-client -y
             apt install python3-pip unzip less -y
             apt install apache2 -y
             systemctl start apache2
@@ -97,9 +98,22 @@ Resources:
             unzip -q awscliv2.zip
             ./aws/install
             rm -r awscliv2.zip
+            wget -c http://wordpress.org/latest.tar.gz
+            tar -xzvf latest.tar.gz
+            rm -r latest.tar.gz
+            mv wordpress /var/www/html/ 
+            chown -R www-data:www-data /var/www/html/wordpress/
+            chmod -R 755 /var/www/html/wordpress/
+            cp /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php
             aws s3 cp s3://${DeploymentBucket}/wordpress-site/web/ /home/ubuntu/wordpress-site/web/ --recursive
             chmod +x /home/ubuntu/wordpress-site/web/wp_setup.sh
             /home/ubuntu/wordpress-site/web/wp_setup.sh
+            cp /home/ubuntu/wordpress-site/web/wordpress.conf /etc/apache2/sites-available/wordpress.conf
+            a2ensite wordpress
+            a2enmod rewrite
+            a2dissite 000-default
+            systemctl reload apache2
+            systemctl restart apache2
       VersionDescription: Version1.0
   MyAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup

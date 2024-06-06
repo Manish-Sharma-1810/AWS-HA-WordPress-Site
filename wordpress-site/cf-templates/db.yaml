@@ -17,7 +17,7 @@ Parameters:
   DeploymentBucket:
     Description: Name of the deployment bucket
     Type: String
-    Default: dev-wordpress-setup-1
+    Default: dev-wordpress-setup-lab-1
   InstanceTypeParam:
     Description: Type of the EC2 instance
     Type: String
@@ -93,7 +93,7 @@ Resources:
           LOCAL_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/local-ipv4)
           aws s3 cp s3://${DeploymentBucket}/wordpress-site/database/ /home/ubuntu/wordpress-site/database/ --recursive
           chmod +x /home/ubuntu/wordpress-site/database/mysql_setup.sh
-          MYSQL_WP_USER=wp_user DB_HOST=$LOCAL_IP /home/ubuntu/wordpress-site/database/mysql_setup.sh
+          DB_HOST=$LOCAL_IP /home/ubuntu/wordpress-site/database/mysql_setup.sh
 Outputs:
   AccountId:
     Description: AWS Account ID

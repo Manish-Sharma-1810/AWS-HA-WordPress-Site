@@ -9,7 +9,7 @@ Parameters:
   DeploymentBucket:
     Description: Name of the deployment bucket
     Type: String
-    Default: dev-wordpress-setup-1
+    Default: dev-wordpress-setup-lab-1
   EnvironmentName:
     Description: Name of the environment
     Type: String
