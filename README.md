@@ -3,22 +3,28 @@
 
 ## Overview
 
-The **AWS-HA-Wordpress-Site** project aims to deploy a highly available and scalable WordPress website on AWS using CloudFormation templates. The infrastructure is designed to ensure high availability, scalability, and security by leveraging various AWS services. This project involves the creation of a custom VPC, subnets, security groups, an application load balancer, auto-scaling groups, IAM roles, and a MySQL database instance.
+The ***AWS-HA-Wordpress-Site*** project aims to deploy a highly available and scalable WordPress website on AWS using CloudFormation templates. The infrastructure is designed to ensure high availability, scalability, and security by leveraging various AWS services. This project involves the creation of a custom VPC, subnets, security groups, an application load balancer, auto-scaling groups, IAM roles, and a MySQL database instance.
 
 ## Technologies Used
 
 - **Amazon Web Services (AWS)**:
   - VPC
+  - Internet Gateway
+  - NAT Gateway
   - EC2
   - S3
-  - CloudFormation
   - IAM
-  - RDS (MySQL)
+  - CloudWatch
+  - CloudFormation
   - Application Load Balancer (ALB)
-  - Auto Scaling
+  - Auto Scaling (with Launch template and Target group)
   - AWS Systems Manager (SSM) Parameter Store
+- **MySQL**
+- **PHP**
+- **Apache2**
 - **WordPress**
 - **Bash Scripting**
+- **AWS CLI**
 
 ## CloudFormation Templates
 
